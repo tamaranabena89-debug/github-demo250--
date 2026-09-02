@@ -94,7 +94,46 @@ function render(){
 function buildNav(){
  nav.innerHTML=menu.filter(x=>can(x[0])).map(x=>`<button class="navbtn ${view===x[0]?"active":""}" onclick="go('${x[0]}')">▸ <span>${x[1]}</span></button>`).join("");
 }
-async function go(v){
+async function go(v) {
+    try {
+        if (!can(v)) {
+            alert("You do not have permission to open this section.");
+            return;
+        }
+
+        view = v;
+        buildNav();
+
+        const pages = {
+            dashboard: dashboard,
+            orders: orders,
+            salesactivity: salesactivity,
+            production: production,
+            procurement: procurement,
+            inventory: inventory,
+            qa: qa,
+            customers: customers,
+            payments: payments,
+            staff: staff,
+            roles: roles,
+            audit: audit
+        };
+
+        const pageFunction = pages[v];
+
+        if (typeof pageFunction !== "function") {
+            console.error("Page function not found:", v);
+            alert("This page is not connected: " + v);
+            return;
+        }
+
+        await pageFunction();
+
+    } catch (error) {
+        console.error("Navigation error:", error);
+        alert("Unable to open " + v + ". Check the browser console for the error.");
+    }
+}async function go(v){
  if(!can(v))v="dashboard";view=v;buildNav();
  pageTitle.textContent={dashboard:"Factory Dashboard",orders:"Orders",salesactivity:"Sales Calls & WhatsApp",production:"Live Production",procurement:"Procurement",inventory:"Store / Inventory",qa:"QA / QC",customers:"Customers",payments:"Payments",staff:"Staff",roles:"Roles & Permissions",audit:"Audit Log"}[v];
  ({dashboard,orders,salesactivity,production,procurement,inventory,qa,customers,payments,staff,roles,audit}[v])();
