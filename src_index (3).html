@@ -224,6 +224,51 @@ async function salesactivity(){
  content.innerHTML=`<div class="grid"><div class="card"><div class="muted">Calls logged</div><div class="metric">${calls}</div></div><div class="card"><div class="muted">WhatsApp logged</div><div class="metric">${wa}</div></div><div class="card"><div class="muted">Follow-ups today</div><div class="metric">${followups}</div></div><div class="card"><div class="muted">Total interactions</div><div class="metric">${rows.length}</div></div></div><div class="bar"><button class="btn" onclick="newSalesActivity('Call')">+ Log Sales Call</button><button class="btn" onclick="newSalesActivity('WhatsApp')">+ Log WhatsApp</button></div><div class="tablewrap"><table class="table"><tr><th>Type</th><th>Customer</th><th>Direction</th><th>Outcome</th><th>Follow-up</th><th>Notes</th><th>Time</th><th>Action</th></tr>${rows.map(x=>`<tr><td><span class="pill">${esc(x.activity_type)}</span></td><td>${esc(x.customer_id)}</td><td>${esc(x.direction)}</td><td>${esc(x.outcome)}</td><td>${x.follow_up_date||""}</td><td>${esc(x.notes)}</td><td>${new Date(x.created_at).toLocaleString()}</td><td><button class="btn" onclick="editSalesActivity('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRow('sales_activities','${x.id}','sales activity')">Delete</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">No sales calls or WhatsApp interactions logged yet</td></tr>`}</table></div>`;
 }
 
+async function newOrder(){
+ try{
+  const c=await db.from("customers").select("id,name").order("name");
+  if(c.error)return alert(c.error.message);
+  if(!c.data?.length)return alert("Create a customer first.");
+  modal("New Order",`<label>Customer<select id="oCustomer">${c.data.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></label><label>Product<input id="oProduct"></label><label>Quantity<input id="oQty" type="number" min="1" value="1" oninput="updateOrderTotal()"></label><label>Unit<select id="oUnit"><option>pcs</option><option>pair</option><option>package</option><option>yard</option></select></label><label>Unit Price<input id="oPrice" type="number" min="0" oninput="updateOrderTotal()"></label><label>Total Amount<input id="oTotal" readonly value="₦0"></label><label>Due Date<input id="oDue" type="date"></label><label>Notes<textarea id="oNotes"></textarea></label>`,"saveOrder()");
+ }catch(e){alert("Unable to open New Order: "+e.message);}
+}
+function updateOrderTotal(){const q=Number(document.getElementById("oQty")?.value||0),p=Number(document.getElementById("oPrice")?.value||0),t=document.getElementById("oTotal");if(t)t.value=money(q*p)}
+async function saveOrder(){
+ const total=Number(oQty.value||0)*Number(oPrice.value||0);
+ if(!oProduct.value.trim()||total<=0)return alert("Enter product, quantity and unit price.");
+ const r=await db.from("orders").insert({order_no:"MC-"+Date.now().toString().slice(-7),customer_id:oCustomer.value,product:oProduct.value.trim(),quantity:Number(oQty.value),unit:oUnit.value,unit_price:Number(oPrice.value),paid:0,due_date:oDue.value||null,notes:oNotes.value,created_by:user.id});
+ if(r.error)return alert(r.error.message);
+ document.querySelector(".modalback")?.remove();orders();
+}
+
+async function newProc(){
+ try{
+  modal("Purchase Request",`<label>Material<input id="pItem"></label><label>Quantity<input id="pQty" type="number" min="0" step="0.01" oninput="updateProcTotal()"></label><label>Unit<select id="pUnit"><option>yard</option><option>pcs</option><option>pair</option><option>package</option></select></label><label>Unit Cost<input id="pUnitCost" type="number" min="0" step="0.01" oninput="updateProcTotal()"></label><label>Total Amount<input id="pAmount" readonly value="₦0"></label><label>Supplier<input id="pSupplier"></label>`,"saveProc()");
+ }catch(e){alert("Unable to open Purchase Request: "+e.message);}
+}
+function updateProcTotal(){const q=Number(document.getElementById("pQty")?.value||0),c=Number(document.getElementById("pUnitCost")?.value||0),a=document.getElementById("pAmount");if(a)a.value=money(q*c)}
+async function saveProc(){
+ const qty=Number(pQty.value||0),cost=Number(pUnitCost.value||0);
+ if(!pItem.value.trim()||qty<=0)return alert("Enter material and quantity.");
+ const r=await db.from("procurement_requests").insert({pr_no:"PR-"+Date.now().toString().slice(-7),item:pItem.value.trim(),quantity:qty,unit:pUnit.value,unit_cost:cost,amount:qty*cost,supplier:pSupplier.value,requested_by:user.id});
+ if(r.error)return alert(r.error.message);
+ document.querySelector(".modalback")?.remove();procurement();
+}
+
+async function newProduction(){
+ try{
+  const o=await db.from("orders").select("id,order_no,product,quantity,unit,customers(name)").order("created_at",{ascending:false});
+  if(o.error)return alert(o.error.message);
+  if(!o.data?.length)return alert("Create an order first.");
+  modal("Production Task",`<label>Order<select id="ptOrder">${o.data.map(x=>`<option value="${x.id}">${esc(x.customers?.name||"Unknown")} · ${esc(x.order_no)} · ${esc(x.product)}</option>`).join("")}</select></label><label>Item<select id="ptItem"><option>Senator Top</option><option>Senator Trouser</option><option>Shirt</option><option>Trouser</option><option>Jacket</option><option>Finishing</option><option>Other</option></select></label><label>Quantity<input id="ptQty" type="number" min="1" value="1"></label><label>Unit<select id="ptUnit"><option>pcs</option><option>pair</option><option>package</option></select></label><label>Stage<select id="ptStage"><option>Cutting</option><option>Sewing</option><option>Finishing</option><option>QA</option><option>Ready</option></select></label><label>Status<select id="ptStatus"><option>Pending</option><option>In Progress</option><option>Completed</option><option>Rework</option></select></label><label>Notes<textarea id="ptNotes"></textarea></label>`,"saveProductionTask()");
+ }catch(e){alert("Unable to open Production Task: "+e.message);}
+}
+async function saveProductionTask(){
+ const r=await db.from("order_production_items").insert({order_id:ptOrder.value,item_name:ptItem.value,quantity:Number(ptQty.value),unit:ptUnit.value,stage:ptStage.value,status:ptStatus.value,notes:ptNotes.value,created_by:user.id});
+ if(r.error)return alert(r.error.message);
+ document.querySelector(".modalback")?.remove();production();
+}
+
 async function newSalesActivity(type){
  const c=await db.from("customers").select("id,name").order("name");
  modal(type==="Call"?"Log Sales Call":"Log WhatsApp Message",
