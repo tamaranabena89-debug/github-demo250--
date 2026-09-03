@@ -379,9 +379,10 @@ function openMark(initial=""){
 function sendMark(){const input=document.getElementById("markInput");const q=input.value.trim();if(!q)return;input.value="";callMark(q)}
 function modal(title,body,saveFn){
  const wrap=document.createElement("div");wrap.className="modalback";
- wrap.innerHTML=`<div class="modal"><h2>${title}</h2>${body}<div class="actions"><button class="btn gray" onclick="this.closest('.modalback').remove()">Cancel</button><button class="btn" onclick="${saveFn}">Save</button></div></div>`;
+ wrap.innerHTML='<div class="modal"><h2>'+title+'</h2>'+body+'<div class="actions"><button type="button" class="btn gray" onclick="this.closest(\'.modalback\').remove()">Cancel</button><button type="button" class="btn" onclick="'+saveFn+'">Save</button></div></div>';
  document.body.appendChild(wrap);
 }
+
 async function newCustomer(){modal("New Customer",`<label>Name<input id="fName"></label><label>Type<select id="fType"><option>Corporate</option><option>Wholesale</option><option>Retail</option><option>School</option><option>Hotel</option><option>Bespoke</option><option>Wedding</option></select></label><label>Phone<input id="fPhone"></label><label>Email<input id="fEmail"></label><label>Address<textarea id="fAddress"></textarea></label>`,"saveCustomer()")}
 async function saveCustomer(){const r=await db.from("customers").insert({name:fName.value,type:fType.value,phone:fPhone.value,email:fEmail.value,address:fAddress.value});if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();customers()}
 async function newOrder(){
@@ -432,12 +433,40 @@ async function newInventory(){modal("Add Inventory Item",`<label>Code<input id="
 async function saveInventory(){const r=await db.from("inventory_items").insert({code:iCode.value,name:iName.value,category:iCategory.value,unit:iUnit.value,stock:+iStock.value,reorder_level:+iReorder.value,unit_cost:+iCost.value});if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();inventory()}
 async function newProduction(){
  try{
-  const [o,staff]=await Promise.all([db.from("orders").select("id,order_no,quantity,unit,product,customers(name)").order("created_at",{ascending:false}),db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name")]);
-  if(o.error)throw o.error;if(staff.error)throw staff.error;
+  const [o,staff]=await Promise.all([
+   db.from("orders").select("id,quantity,unit,product,customer_id").order("created_at",{ascending:false}),
+   db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name")
+  ]);
+  if(o.error)throw o.error;
   if(!(o.data||[]).length)return alert("Create an order first before creating a production task.");
-  modal("Production Task",`<label>Customer / Order<select id="ptOrder">${(o.data||[]).map(x=>`<option value="${x.id}">${esc(x.customers?.name||"Unknown")} · ${esc(x.order_no)} · ${esc(x.product)} (${x.quantity} ${esc(x.unit||"pcs")})</option>`).join("")}</select></label><label>Production Item<select id="ptItem"><option>Senator Top</option><option>Senator Trouser</option><option>Shirt</option><option>Trouser</option><option>Jacket</option><option>Gown</option><option>Finishing</option><option>Other</option></select></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="ptQty" type="number" min="1" value="1"></label><label>Unit<select id="ptUnit"><option>pcs</option><option>pair</option><option>package</option></select></div><label>Stage<select id="ptStage">${stageOptions()}</select></label><label>Assign To<select id="ptAssigned"><option value="">Unassigned</option>${(staff.data||[]).filter(x=>["Tailor","Finisher"].includes(x.role)).map(x=>`<option value="${x.id}">${esc(x.full_name)} · ${esc(x.role)}</option>`).join("")}</select></label><label>Status<select id="ptStatus"><option>Pending</option><option>In Progress</option><option>Completed</option><option>Rework</option></select></label><label>Notes<textarea id="ptNotes"></textarea></label>`,"saveProductionTask()");
- }catch(e){console.error(e);alert("Unable to open Production Task: "+(e.message||e));}
+  const customerIds=[...new Set((o.data||[]).map(x=>x.customer_id).filter(Boolean))];
+  let customers={};
+  if(customerIds.length){
+   const cr=await db.from("customers").select("id,name").in("id",customerIds);
+   if(cr.error)throw cr.error;
+   customers=Object.fromEntries((cr.data||[]).map(x=>[x.id,x.name]));
+  }
+  const staffList=staff.error?[]:(staff.data||[]);
+  const orderOptions=(o.data||[]).map(x=>{
+   const customerName=customers[x.customer_id]||"Unknown customer";
+   return '<option value="'+esc(x.id)+'">'+esc(customerName)+' · '+esc(x.product||"Product")+' ('+x.quantity+' '+esc(x.unit||"pcs")+')</option>';
+  }).join("");
+  modal("Production Task",
+   '<label>Customer<select id="ptOrder">'+orderOptions+'</select></label>'+
+   '<label>Production Item<select id="ptItem"><option>Senator Top</option><option>Senator Trouser</option><option>Shirt</option><option>Trouser</option><option>Jacket</option><option>Gown</option><option>Finishing</option><option>Other</option></select></label>'+
+   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="ptQty" type="number" min="1" value="1"></label><label>Unit<select id="ptUnit"><option>pcs</option><option>pair</option><option>package</option></select></label></div>'+
+   '<label>Stage<select id="ptStage">'+stageOptions()+'</select></label>'+
+   '<label>Assign To<select id="ptAssigned"><option value="">Unassigned</option>'+staffList.filter(x=>["Tailor","Finisher"].includes(x.role)).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+' · '+esc(x.role)+'</option>').join("")+'</select></label>'+
+   '<label>Status<select id="ptStatus"><option>Pending</option><option>In Progress</option><option>Completed</option><option>Rework</option></select></label>'+
+   '<label>Notes<textarea id="ptNotes"></textarea></label>',
+   "saveProductionTask()"
+  );
+ }catch(e){
+  console.error(e);
+  alert("Unable to open Production Task: "+(e.message||e));
+ }
 }
+
 async function saveProductionTask(){
  const qty=Number(ptQty.value||0);if(qty<=0)return alert("Enter a valid quantity.");
  const r=await db.from("order_production_items").insert({order_id:ptOrder.value,item_name:ptItem.value,quantity:qty,unit:ptUnit.value,stage:ptStage.value,assigned_to:ptAssigned.value||null,status:ptStatus.value,notes:ptNotes.value,created_by:user.id});
@@ -445,18 +474,42 @@ async function saveProductionTask(){
  document.querySelector(".modalback")?.remove();production();
 }
 
-async function saveProductionTask(){const r=await db.from("order_production_items").insert({order_id:ptOrder.value,item_name:ptItem.value,quantity:+ptQty.value,unit:ptUnit.value,stage:ptStage.value,assigned_to:ptAssigned.value||null,status:ptStatus.value,notes:ptNotes.value,created_by:user.id});if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();production()}
 async function production(){
  const [r,t]=await Promise.all([db.from("production_updates").select("*,orders(order_no,product,quantity,unit,customer_id,customers(name))").order("created_at",{ascending:false}),db.from("order_production_items").select("*,orders(order_no,product,quantity,unit,customers(name)),profiles:assigned_to(full_name,role)").order("created_at",{ascending:false})]);
- content.innerHTML=`<div class="bar"><button class="btn" onclick="newProduction()">+ Production Task</button></div><div class="card"><h3>Assigned Production Work</h3><div class="tablewrap"><table class="table"><tr><th>Customer</th><th>Order</th><th>Item</th><th>Qty</th><th>Stage</th><th>Assigned To</th><th>Status</th><th>Action</th></tr>${(t.data||[]).map(x=>`<tr><td><b>${esc(x.orders?.customers?.name||"Unknown")}</b></td><td>${esc(x.orders?.order_no||"")}</td><td>${esc(x.item_name)}</td><td>${x.quantity} ${esc(x.unit)}</td><td>${esc(x.stage)}</td><td>${esc(x.profiles?.full_name||"Unassigned")}</td><td>${esc(x.status)}</td><td><button class="btn" onclick="editProductionTask('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRow('order_production_items','${x.id}','production task')">Delete</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">No production tasks assigned yet</td></tr>`}</table></div></div><div class="tablewrap"><table class="table"><tr><th>Customer</th><th>Order</th><th>Product</th><th>Stage</th><th>Completed</th><th>Status</th><th>Updated</th><th>Action</th></tr>${(r.data||[]).map(x=>`<tr><td><b>${esc(x.orders?.customers?.name||"Unknown customer")}</b></td><td>${esc(x.orders?.order_no)}</td><td>${esc(x.orders?.product)}</td><td>${esc(x.stage)}</td><td>${x.completed_qty}/${x.orders?.quantity} ${esc(x.orders?.unit||"pcs")}</td><td>${esc(x.status)}</td><td>${new Date(x.created_at).toLocaleString()}</td><td><button class="btn" onclick="editProduction('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRow('production_updates','${x.id}','production update')">Delete</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">No production updates yet</td></tr>`}</table></div>`;
+ content.innerHTML=`<div class="bar"><button type="button" class="btn" onclick="newProduction()">+ Production Task</button></div><div class="card"><h3>Assigned Production Work</h3><div class="tablewrap"><table class="table"><tr><th>Customer</th><th>Order</th><th>Item</th><th>Qty</th><th>Stage</th><th>Assigned To</th><th>Status</th><th>Action</th></tr>${(t.data||[]).map(x=>`<tr><td><b>${esc(x.orders?.customers?.name||"Unknown")}</b></td><td>${esc(x.orders?.order_no||"")}</td><td>${esc(x.item_name)}</td><td>${x.quantity} ${esc(x.unit)}</td><td>${esc(x.stage)}</td><td>${esc(x.profiles?.full_name||"Unassigned")}</td><td>${esc(x.status)}</td><td><button class="btn" onclick="editProductionTask('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRow('order_production_items','${x.id}','production task')">Delete</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">No production tasks assigned yet</td></tr>`}</table></div></div><div class="tablewrap"><table class="table"><tr><th>Customer</th><th>Order</th><th>Product</th><th>Stage</th><th>Completed</th><th>Status</th><th>Updated</th><th>Action</th></tr>${(r.data||[]).map(x=>`<tr><td><b>${esc(x.orders?.customers?.name||"Unknown customer")}</b></td><td>${esc(x.orders?.order_no)}</td><td>${esc(x.orders?.product)}</td><td>${esc(x.stage)}</td><td>${x.completed_qty}/${x.orders?.quantity} ${esc(x.orders?.unit||"pcs")}</td><td>${esc(x.status)}</td><td>${new Date(x.created_at).toLocaleString()}</td><td><button class="btn" onclick="editProduction('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRow('production_updates','${x.id}','production update')">Delete</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">No production updates yet</td></tr>`}</table></div>`;
 }
 async function editProductionTask(id){const r=await db.from("order_production_items").select("*").eq("id",id).single();if(r.error)return alert(r.error.message);const [o,staff]=await Promise.all([db.from("orders").select("id,order_no,product,customers(name)").order("created_at",{ascending:false}),db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name")]);modal("Edit Production Task",`<label>Order<select id="etOrder">${(o.data||[]).map(x=>`<option value="${x.id}" ${x.id===r.data.order_id?"selected":""}>${esc(x.customers?.name||"Unknown")} · ${x.order_no} · ${esc(x.product)}</option>`).join("")}</select></label><label>Production Item<select id="etItem">${["Senator Top","Senator Trouser","Shirt","Trouser","Jacket","Gown","Finishing","Other"].map(v=>`<option ${v===r.data.item_name?"selected":""}>${v}</option>`).join("")}</select></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="etQty" type="number" value="${r.data.quantity}"></label><label>Unit<select id="etUnit">${["pcs","pair","package"].map(v=>`<option ${v===r.data.unit?"selected":""}>${v}</option>`).join("")}</select></label></div><label>Stage<select id="etStage">${stageOptions(r.data.stage)}</select></label><label>Assign To<select id="etAssigned"><option value="">Unassigned</option>${(staff.data||[]).filter(x=>["Tailor","Finisher"].includes(x.role)).map(x=>`<option value="${x.id}" ${x.id===r.data.assigned_to?"selected":""}>${esc(x.full_name)} · ${esc(x.role)}</option>`).join("")}</select></label><label>Status<select id="etStatus">${["Pending","In Progress","Completed","Rework"].map(v=>`<option ${v===r.data.status?"selected":""}>${v}</option>`).join("")}</select></label><label>Notes<textarea id="etNotes">${esc(r.data.notes||"")}</textarea></label>`,`saveProductionTaskEdit('${id}')`)}
 async function saveProductionTaskEdit(id){const r=await db.from("order_production_items").update({order_id:etOrder.value,item_name:etItem.value,quantity:+etQty.value,unit:etUnit.value,stage:etStage.value,assigned_to:etAssigned.value||null,status:etStatus.value,notes:etNotes.value,updated_at:new Date().toISOString()}).eq("id",id);if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();production()}
 
 async function newQA(){
- const o=await db.from("orders").select("id,order_no,product,customers(name)").order("created_at",{ascending:false});
- if(o.error)return alert(o.error.message);
- modal("QA / QC Inspection",`<label>Customer / Order<select id="qOrder">${(o.data||[]).map(x=>`<option value="${x.id}">${esc(x.customers?.name||"Unknown")} · ${esc(x.order_no)} · ${esc(x.product)}</option>`).join("")}</select></label><label>Measurement<input id="qMeasurement"></label><label>Required Value<input id="qRequired"></label><label>Actual Value<input id="qActual"></label><label>Status<select id="qStatus"><option>Pass</option><option>Fail</option><option>Rework</option></select></label><label>Defect / Notes<textarea id="qDefect"></textarea></label>`,"saveQA()");
+ try{
+  const o=await db.from("orders").select("id,product,customer_id").order("created_at",{ascending:false});
+  if(o.error)throw o.error;
+  if(!(o.data||[]).length)return alert("Create an order first before creating a QA/QC inspection.");
+  const customerIds=[...new Set((o.data||[]).map(x=>x.customer_id).filter(Boolean))];
+  let customers={};
+  if(customerIds.length){
+   const cr=await db.from("customers").select("id,name").in("id",customerIds);
+   if(cr.error)throw cr.error;
+   customers=Object.fromEntries((cr.data||[]).map(x=>[x.id,x.name]));
+  }
+  const options=(o.data||[]).map(x=>{
+   const customerName=customers[x.customer_id]||"Unknown customer";
+   return '<option value="'+esc(x.id)+'">'+esc(customerName)+' · '+esc(x.product||"Product")+'</option>';
+  }).join("");
+  modal("QA / QC Inspection",
+   '<label>Customer<select id="qOrder">'+options+'</select></label>'+
+   '<label>Measurement<input id="qMeasurement"></label>'+
+   '<label>Required Value<input id="qRequired"></label>'+
+   '<label>Actual Value<input id="qActual"></label>'+
+   '<label>Status<select id="qStatus"><option>Pass</option><option>Fail</option><option>Rework</option></select></label>'+
+   '<label>Defect / Notes<textarea id="qDefect"></textarea></label>',
+   "saveQA()"
+  );
+ }catch(e){
+  console.error(e);
+  alert("Unable to open QA/QC Inspection: "+(e.message||e));
+ }
 }
 
 async function saveQA(){const r=await db.from("qa_inspections").insert({order_id:qOrder.value,measurement:qMeasurement.value,required_value:qRequired.value,actual_value:qActual.value,status:qStatus.value,defect:qDefect.value,inspected_by:user.id});if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();qa()}
