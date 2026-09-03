@@ -87,12 +87,18 @@ async function saveProductionTask(){
 }
 
 async function saveProc(){
- const qty=Number(pQty.value||0),cost=Number(pUnitCost.value||0);
- if(!pItem.value.trim()||qty<=0)return alert("Enter material and quantity.");
+ const qty=Number(document.getElementById("pQty")?.value||0);
+ const cost=Number(document.getElementById("pUnitCost")?.value||0);
+ const item=(document.getElementById("pItem")?.value||"").trim();
+ const supplier=(document.getElementById("pSupplier")?.value||"").trim();
+ const orderId=document.getElementById("pOrder")?.value||null;
+ if(!item||qty<=0)return alert("Enter material and quantity.");
+ if(!Number.isFinite(cost)||cost<0)return alert("Enter a valid unit cost.");
+ const amount=qty*cost;
+ if(!Number.isFinite(amount))return alert("Unable to calculate total cost.");
  const r=await db.from("procurement_requests").insert({
-  pr_no:"PR-"+Date.now().toString().slice(-7),order_id:pOrder.value||null,item:pItem.value.trim(),
-  quantity:qty,unit:pUnit.value,unit_cost:cost,amount:qty*cost,supplier:pSupplier.value,
-  status:"Pending Approval",requested_by:user.id
+  pr_no:"PR-"+Date.now().toString().slice(-7),order_id:orderId,item,quantity:qty,
+  unit:document.getElementById("pUnit")?.value||"pcs",unit_cost:cost,amount,supplier,requested_by:user.id
  });
  if(r.error)return alert("Unable to save procurement request: "+r.error.message);
  document.querySelector(".modalback")?.remove();
@@ -528,17 +534,41 @@ async function newProc(){
 }
 function updateProcTotal(){const q=Number(document.getElementById("pQty")?.value||0),c=Number(document.getElementById("pUnitCost")?.value||0),a=document.getElementById("pAmount");if(a)a.value=money(q*c)}
 async function saveProc(){
- const qty=Number(pQty.value||0),cost=Number(pUnitCost.value||0);
- if(!pItem.value.trim()||qty<=0)return alert("Enter material and quantity.");
- const r=await db.from("procurement_requests").insert({pr_no:"PR-"+Date.now().toString().slice(-7),order_id:pOrder.value||null,item:pItem.value.trim(),quantity:qty,unit:pUnit.value,unit_cost:cost,amount:qty*cost,supplier:pSupplier.value,requested_by:user.id});
- if(r.error)return alert(r.error.message);
- document.querySelector(".modalback")?.remove();procurement();
+ const qty=Number(document.getElementById("pQty")?.value||0);
+ const cost=Number(document.getElementById("pUnitCost")?.value||0);
+ const item=(document.getElementById("pItem")?.value||"").trim();
+ const supplier=(document.getElementById("pSupplier")?.value||"").trim();
+ const orderId=document.getElementById("pOrder")?.value||null;
+ if(!item||qty<=0)return alert("Enter material and quantity.");
+ if(!Number.isFinite(cost)||cost<0)return alert("Enter a valid unit cost.");
+ const amount=qty*cost;
+ if(!Number.isFinite(amount))return alert("Unable to calculate total cost.");
+ const r=await db.from("procurement_requests").insert({
+  pr_no:"PR-"+Date.now().toString().slice(-7),order_id:orderId,item,quantity:qty,
+  unit:document.getElementById("pUnit")?.value||"pcs",unit_cost:cost,amount,supplier,requested_by:user.id
+ });
+ if(r.error)return alert("Unable to save procurement request: "+r.error.message);
+ document.querySelector(".modalback")?.remove();
+ await procurement();
 }
 
-async function saveProc(){const r=await db.from("procurement_requests").insert({pr_no:"PR-"+Date.now().toString().slice(-7),item:pItem.value,quantity:+pQty.value,unit:pUnit.value,supplier:pSupplier.value,amount:+pAmount.value,requested_by:user.id});if(r.error)return alert(r.error.message);document.querySelector(".modalback").remove();procurement()}
-async function issueAccessory(){
- const [i,o,staff]=await Promise.all([db.from("inventory_items").select("id,name,unit,stock").order("name"),db.from("orders").select("id,order_no,customers(name)").order("created_at",{ascending:false}),db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name")]);
- modal("Issue Accessory to Tailor / Finisher",`<label>Accessory<select id="isItem">${(i.data||[]).map(x=>`<option value="${x.id}">${esc(x.name)} · Stock ${x.stock} ${esc(x.unit||"")}</option>`).join("")}</select></label><label>Order (optional)<select id="isOrder"><option value="">General / Bulk Stock</option>${(o.data||[]).map(x=>`<option value="${x.id}">${esc(x.customers?.name||"Unknown")} · ${x.order_no}</option>`).join("")}</select></label><label>Assign To<select id="isStaff">${(staff.data||[]).filter(x=>["Tailor","Finisher"].includes(x.role)).map(x=>`<option value="${x.id}">${esc(x.full_name)} · ${esc(x.role)}</option>`).join("")}</select></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="isQty" type="number" step="0.01" min="0"></label><label>Unit<select id="isUnit"><option>yard</option><option>pcs</option><option>pair</option><option>package</option></select></label></div><label>Notes<textarea id="isNotes" placeholder="e.g. 1/2 yard pocketing for MCF-123"></textarea></label>`,`saveIssueAccessory()`)
+async function saveProc(){
+ const qty=Number(document.getElementById("pQty")?.value||0);
+ const cost=Number(document.getElementById("pUnitCost")?.value||0);
+ const item=(document.getElementById("pItem")?.value||"").trim();
+ const supplier=(document.getElementById("pSupplier")?.value||"").trim();
+ const orderId=document.getElementById("pOrder")?.value||null;
+ if(!item||qty<=0)return alert("Enter material and quantity.");
+ if(!Number.isFinite(cost)||cost<0)return alert("Enter a valid unit cost.");
+ const amount=qty*cost;
+ if(!Number.isFinite(amount))return alert("Unable to calculate total cost.");
+ const r=await db.from("procurement_requests").insert({
+  pr_no:"PR-"+Date.now().toString().slice(-7),order_id:orderId,item,quantity:qty,
+  unit:document.getElementById("pUnit")?.value||"pcs",unit_cost:cost,amount,supplier,requested_by:user.id
+ });
+ if(r.error)return alert("Unable to save procurement request: "+r.error.message);
+ document.querySelector(".modalback")?.remove();
+ await procurement();
 }
 async function saveIssueAccessory(){const qty=Number(isQty.value||0);if(qty<=0)return alert("Enter a quantity");const item=await db.from("inventory_items").select("stock,name,unit").eq("id",isItem.value).single();if(item.error)return alert(item.error.message);if(Number(item.data.stock)<qty)return alert(`Insufficient stock. Available: ${item.data.stock} ${item.data.unit||""}`);const r=await db.from("store_transactions").insert({inventory_item_id:isItem.value,order_id:isOrder.value||null,assigned_to:isStaff.value,transaction_type:"Issue",quantity:qty,unit:isUnit.value,issued_by:user.id,notes:isNotes.value});if(r.error)return alert(r.error.message);const u=await db.from("inventory_items").update({stock:Number(item.data.stock)-qty}).eq("id",isItem.value);if(u.error)return alert(u.error.message);document.querySelector(".modalback").remove();inventory()}
 async function receiveStock(){const i=await db.from("inventory_items").select("id,name,unit,stock").order("name");modal("Receive Bulk Store Stock",`<label>Accessory / Material<select id="rcItem">${(i.data||[]).map(x=>`<option value="${x.id}">${esc(x.name)} · Current ${x.stock} ${esc(x.unit||"")}</option>`).join("")}</select></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="rcQty" type="number" step="0.01" min="0"></label><label>Unit<select id="rcUnit"><option>yard</option><option>pcs</option><option>pair</option><option>package</option></select></label></div><label>Notes<textarea id="rcNotes" placeholder="Supplier / bulk purchase details"></textarea></label>`,`saveReceiveStock()`)}
