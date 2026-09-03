@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Markcharles Garment Factory ERP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+function stageOptions(selected){
+ const stages=["Procurement","Awaiting Fitting","Cutting","Sewing","Finishing","Packaging","QA/QC","Delivery","Completed","Rework","On Hold"];
+ return stages.map(v=>'<option value="'+esc(v)+'" '+(v===selected?'selected':'')+'>'+esc(v)+'</option>').join("");
+}
+
 /* Final ERP button and transaction handlers. These definitions intentionally sit last
    so older duplicate handlers in the file cannot override the working versions. */
 
