@@ -4,125 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Markcharles Garment Factory ERP</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-function stageOptions(selected){
- const stages=["Procurement","Awaiting Fitting","Cutting","Sewing","Finishing","Packaging","QA/QC","Delivery","Completed","Rework","On Hold"];
- return stages.map(v=>'<option value="'+esc(v)+'" '+(v===selected?'selected':'')+'>'+esc(v)+'</option>').join("");
-}
-
-/* Final ERP button and transaction handlers. These definitions intentionally sit last
-   so older duplicate handlers in the file cannot override the working versions. */
-
-async function newOrder(){
- try{
-  const c=await db.from("customers").select("id,name").order("name");
-  if(c.error)throw c.error;
-  if(!(c.data||[]).length)return alert("Create a customer first before creating an order.");
-  const staff=await db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name");
-  const staffRows=staff.data||[];
-  modal("New Order",
-   '<label>Customer<select id="oCustomer">'+(c.data||[]).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("")+'</select></label>'+
-   '<label>Service<select id="oService>'+["Wholesale","Corporate","R2W","Bespoke","School Uniform","Hotel Uniform","Wedding"].map(v=>'<option>'+v+'</option>').join("")+'</select></label>'+
-   '<label>Product<input id="oProduct"></label>'+
-   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="oQty" type="number" min="1" value="1" oninput="updateOrderTotal(\'oQty\',\'oPrice\',\'oTotal\')"></label>'+
-   '<label>Unit<select id="oUnit"><option>pcs</option><option selected>pair</option><option>package</option><option>yard</option></select></label></div>'+
-   '<label>Unit Price<input id="oPrice" type="number" min="0" oninput="updateOrderTotal(\'oQty\',\'oPrice\',\'oTotal\')"></label>'+
-   '<label>Total Amount<input id="oTotal" readonly value="₦0"></label>'+
-   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Stage<select id="oStage">'+stageOptions()+'</select></label><label>Due Date<input id="oDue" type="date"></label></div>'+
-   '<label>Priority<select id="oPriority"><option>Normal</option><option>High</option><option>Urgent</option></select></label>'+
-   '<label>Assigned Staff<select id="oAssigned"><option value="">Unassigned</option>'+
-   staffRows.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+' · '+esc(x.role)+'</option>').join("")+
-   '</select></label><label>Fabric<input id="oFabric"></label><label>Measurements / Sizes<textarea id="oMeasurements"></textarea></label><label>Notes<textarea id="oNotes"></textarea></label>',
-   "saveOrder()");
- }catch(e){console.error(e);alert("Unable to open New Order: "+(e.message||e));}
-}
-
-async function newProduction(){
- try{
-  const o=await db.from("orders").select("id,order_no,quantity,unit,product,customers(name)").order("created_at",{ascending:false});
-  if(o.error)throw o.error;
-  if(!(o.data||[]).length)return alert("Create an order first before creating a production task.");
-  const staff=await db.from("profiles").select("id,full_name,role").eq("active",true).order("full_name");
-  const staffRows=staff.data||[];
-  modal("Production Task",
-   '<label>Customer / Order<select id="ptOrder">'+(o.data||[]).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.customers?.name||"Unknown")+' · '+esc(x.order_no)+' · '+esc(x.product)+' ('+x.quantity+' '+esc(x.unit||"pcs")+')</option>').join("")+'</select></label>'+
-   '<label>Production Item<select id="ptItem">'+["Senator Top","Senator Trouser","Shirt","Trouser","Jacket","Gown","Finishing","Other"].map(v=>'<option>'+v+'</option>').join("")+'</select></label>'+
-   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Quantity<input id="ptQty" type="number" min="1" value="1"></label><label>Unit<select id="ptUnit"><option>pcs</option><option>pair</option><option>package</option></select></label></div>'+
-   '<label>Stage<select id="ptStage">'+stageOptions()+'</select></label>'+
-   '<label>Assign To<select id="ptAssigned"><option value="">Unassigned</option>'+
-   staffRows.filter(x=>["Tailor","Finisher"].includes(x.role)).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+' · '+esc(x.role)+'</option>').join("")+
-   '</select></label><label>Status<select id="ptStatus"><option>Pending</option><option>In Progress</option><option>Completed</option><option>Rework</option></select></label>'+
-   '<label>Notes<textarea id="ptNotes"></textarea></label>',
-   "saveProductionTask()");
- }catch(e){console.error(e);alert("Unable to open Production Task: "+(e.message||e));}
-}
-
-async function saveOrder(){
- const total=(Number(oQty.value)||0)*(Number(oPrice.value)||0);
- if(!oCustomer.value||!oProduct.value.trim()||total<=0)return alert("Select a customer and enter product, quantity and unit price.");
- const r=await db.from("orders").insert({
-  order_no:"MC-"+Date.now().toString().slice(-7),customer_id:oCustomer.value,service:oService.value,
-  product:oProduct.value.trim(),quantity:Number(oQty.value),unit:oUnit.value,unit_price:Number(oPrice.value),
-  paid:0,due_date:oDue.value||null,stage:oStage.value,priority:oPriority.value,assigned_to:oAssigned.value||null,
-  fabric:oFabric.value,measurements:oMeasurements.value,notes:oNotes.value,created_by:user.id
- }).select("id").single();
- if(r.error)return alert("Unable to create order: "+r.error.message);
- const p=await db.from("production_updates").insert({order_id:r.data.id,stage:oStage.value,completed_qty:0,status:"In Progress",notes:"Order created",updated_by:user.id});
- if(p.error)console.warn("Initial production update:",p.error.message);
- document.querySelector(".modalback")?.remove();
- await orders();
-}
-
-async function saveProductionTask(){
- const qty=Number(ptQty.value||0);
- if(!ptOrder.value)return alert("Select an order.");
- if(qty<=0)return alert("Enter a valid quantity.");
- const r=await db.from("order_production_items").insert({
-  order_id:ptOrder.value,item_name:ptItem.value,quantity:qty,unit:ptUnit.value,stage:ptStage.value,
-  assigned_to:ptAssigned.value||null,status:ptStatus.value,notes:ptNotes.value,created_by:user.id
- });
- if(r.error)return alert("Unable to create production task: "+r.error.message);
- document.querySelector(".modalback")?.remove();
- await production();
-}
-
-async function saveProc(){
- const qty=Number(document.getElementById("pQty")?.value||0);
- const cost=Number(document.getElementById("pUnitCost")?.value||0);
- const item=(document.getElementById("pItem")?.value||"").trim();
- const supplier=(document.getElementById("pSupplier")?.value||"").trim();
- const orderId=document.getElementById("pOrder")?.value||null;
- if(!item||qty<=0)return alert("Enter material and quantity.");
- if(!Number.isFinite(cost)||cost<0)return alert("Enter a valid unit cost.");
- const amount=qty*cost;
- if(!Number.isFinite(amount))return alert("Unable to calculate total cost.");
- const r=await db.from("procurement_requests").insert({
-  pr_no:"PR-"+Date.now().toString().slice(-7),order_id:orderId,item,quantity:qty,
-  unit:document.getElementById("pUnit")?.value||"pcs",unit_cost:cost,amount,supplier,requested_by:user.id
- });
- if(r.error)return alert("Unable to save procurement request: "+r.error.message);
- document.querySelector(".modalback")?.remove();
- await procurement();
-}
-
-async function savePayment(){
- const amount=Number(payAmount.value||0);
- if(amount<=0)return alert("Enter a valid payment amount.");
- const o=await db.from("orders").select("id,quantity,unit_price,paid").eq("id",payOrder.value).single();
- if(o.error)return alert("Unable to load order: "+o.error.message);
- const total=(Number(o.data.quantity)||0)*(Number(o.data.unit_price)||0);
- const current=Number(o.data.paid)||0;
- const balance=Math.max(0,total-current);
- if(amount>balance)return alert("Payment cannot exceed the outstanding balance of "+money(balance)+".");
- const r=await db.from("payments").insert({order_id:payOrder.value,amount,method:payMethod.value,paid_on:payDate.value,recorded_by:user.id});
- if(r.error)return alert("Unable to record payment: "+r.error.message);
- const u=await db.from("orders").update({paid:current+amount}).eq("id",payOrder.value);
- if(u.error)return alert("Payment recorded, but order balance could not be updated: "+u.error.message);
- document.querySelector(".modalback")?.remove();
- await payments();
-}
-
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fa;color:#17202f}
 button,input,select,textarea{font:inherit}.login{min-height:100vh;display:grid;place-items:center;background:#101827}
@@ -174,6 +56,11 @@ const perms={
 };
 const money=n=>"₦"+Number(n||0).toLocaleString();
 const esc=x=>String(x??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+function stageOptions(selected){
+ const stages=["Procurement","Awaiting Fitting","Cutting","Sewing","Finishing","Packaging","QA/QC","Delivery","Completed","Rework","On Hold"];
+ return stages.map(v=>'<option value="'+esc(v)+'" '+(v===selected?'selected':'')+'>'+esc(v)+'</option>').join("");
+}
+
 function can(v){return profile && (v==="roles" ? profile.role==="Management" : (perms[profile.role]||[]).includes(v))}
 
 async function init(){
@@ -603,6 +490,63 @@ db.channel("factory-live")
  .on("postgres_changes",{event:"*",schema:"public",table:"inventory_items"},()=>view==="inventory"&&inventory())
  .on("postgres_changes",{event:"*",schema:"public",table:"qa_inspections"},()=>view==="qa"&&qa())
  .subscribe();
+
+
+/* Final relationship-safe loaders. The database does not expose recorded_by/inspected_by
+   as PostgREST relationships, so names are resolved through profiles separately. */
+async function payments(){
+ try{
+  const r=await db.from("payments").select("*,orders(order_no,product,quantity,unit,unit_price,paid,customers(name))").order("created_at",{ascending:false});
+  if(r.error)throw r.error;
+  const rows=r.data||[];
+  const ids=[...new Set(rows.map(x=>x.recorded_by).filter(Boolean))];
+  let names={};
+  if(ids.length){
+   const p=await db.from("profiles").select("id,full_name").in("id",ids);
+   if(p.error)throw p.error;
+   names=Object.fromEntries((p.data||[]).map(x=>[x.id,x.full_name]));
+  }
+  content.innerHTML=`<div class="bar"><button class="btn" onclick="newPayment()">+ Record Payment</button></div><div class="tablewrap"><table class="table"><tr><th>Date</th><th>Customer</th><th>Order</th><th>Total</th><th>Payment</th><th>Balance</th><th>Method</th><th>Recorded By</th></tr>${rows.map(x=>{
+   const total=(Number(x.orders?.quantity)||0)*(Number(x.orders?.unit_price)||0);
+   const paid=Number(x.orders?.paid)||0;
+   const balance=Math.max(0,total-paid);
+   return `<tr><td>${x.paid_on||""}</td><td><b>${esc(x.orders?.customers?.name||"Unknown customer")}</b></td><td>${esc(x.orders?.order_no||"")}</td><td>${money(total)}</td><td><b>${money(x.amount)}</b></td><td>${money(balance)}</td><td>${esc(x.method||"")}</td><td>${esc(names[x.recorded_by]||"")}</td></tr>`;
+  }).join("")||`<tr><td colspan="8" class="empty">No payments recorded yet</td></tr>`}</table></div>`;
+ }catch(e){console.error(e);alert("Unable to load payments: "+(e.message||e));}
+}
+
+async function qa(){
+ try{
+  const r=await db.from("qa_inspections").select("*,orders(order_no,product,customers(name))").order("created_at",{ascending:false});
+  if(r.error)throw r.error;
+  const rows=r.data||[];
+  const ids=[...new Set(rows.map(x=>x.inspected_by).filter(Boolean))];
+  let names={};
+  if(ids.length){
+   const p=await db.from("profiles").select("id,full_name").in("id",ids);
+   if(p.error)throw p.error;
+   names=Object.fromEntries((p.data||[]).map(x=>[x.id,x.full_name]));
+  }
+  content.innerHTML=`<div class="bar"><button class="btn" onclick="newQA()">+ New QA / QC Inspection</button></div><div class="tablewrap"><table class="table"><tr><th>Customer</th><th>Order</th><th>Product</th><th>Measurement</th><th>Required</th><th>Actual</th><th>Status</th><th>Defect / Notes</th><th>Inspected By</th><th>Time</th></tr>${rows.map(x=>`<tr><td><b>${esc(x.orders?.customers?.name||"Unknown customer")}</b></td><td>${esc(x.orders?.order_no||"")}</td><td>${esc(x.orders?.product||"")}</td><td>${esc(x.measurement||"")}</td><td>${esc(x.required_value||"")}</td><td>${esc(x.actual_value||"")}</td><td>${esc(x.status||"")}</td><td>${esc(x.defect||"")}</td><td>${esc(names[x.inspected_by]||"")}</td><td>${new Date(x.created_at).toLocaleString()}</td></tr>`).join("")||`<tr><td colspan="10" class="empty">No QA/QC inspections yet</td></tr>`}</table></div>`;
+ }catch(e){console.error(e);alert("Unable to load QA/QC: "+(e.message||e));}
+}
+
+async function savePayment(){
+ const amount=Number(payAmount.value||0);
+ if(amount<=0)return alert("Enter a valid payment amount.");
+ const o=await db.from("orders").select("id,quantity,unit_price,paid").eq("id",payOrder.value).single();
+ if(o.error)return alert("Unable to load order: "+o.error.message);
+ const total=(Number(o.data.quantity)||0)*(Number(o.data.unit_price)||0);
+ const current=Number(o.data.paid)||0;
+ const balance=Math.max(0,total-current);
+ if(amount>balance)return alert("Payment cannot exceed the outstanding balance of "+money(balance)+".");
+ const r=await db.from("payments").insert({order_id:payOrder.value,amount,method:payMethod.value,paid_on:payDate.value,recorded_by:user.id});
+ if(r.error)return alert("Unable to record payment: "+r.error.message);
+ const u=await db.from("orders").update({paid:current+amount}).eq("id",payOrder.value);
+ if(u.error)return alert("Payment recorded, but order balance could not be updated: "+u.error.message);
+ document.querySelector(".modalback")?.remove();
+ await payments();
+}
 
 init();
 </script>
