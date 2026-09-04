@@ -4,15 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Markcharles Garment Factory ERP</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fa;color:#17202f}button,input,select,textarea{font:inherit}.login{min-height:100vh;display:grid;place-items:center;background:#101827}.loginbox{background:#fff;width:min(430px,92%);padding:30px;border-radius:16px;box-shadow:0 20px 50px #0003}.brand{font-weight:800;letter-spacing:.8px}.muted{color:#667085;font-size:13px}input,select,textarea{width:100%;padding:10px 11px;margin:5px 0 12px;border:1px solid #d0d5dd;border-radius:8px;background:#fff}.btn{border:0;border-radius:8px;padding:10px 14px;background:#2563eb;color:#fff;cursor:pointer}.btn.gray{background:#667085}.btn.danger{background:#b42318}.btn.gold{background:#f0c060;color:#101827;font-weight:800}.app{min-height:100vh}.side{position:fixed;inset:0 auto 0 0;width:235px;background:#101827;color:#fff;padding:18px 12px;overflow:auto}.side h2{margin:3px 8px 0}.side small{display:block;margin:4px 8px 18px;color:#aab4c5}.navbtn{display:block;width:100%;padding:11px 12px;background:none;border:0;color:#dbe3ef;text-align:left;border-radius:8px;cursor:pointer;margin:2px 0}.navbtn:hover,.navbtn.active{background:#243148;color:#fff}.logout{margin-top:18px}.main{margin-left:235px;padding:26px;max-width:1550px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}h1{margin:0 0 4px;font-size:28px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:17px}.metric{font-size:27px;font-weight:800;margin-top:5px}.tablewrap{overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-top:14px}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:11px;border-bottom:1px solid #eee;text-align:left;font-size:13px;white-space:nowrap}.pill{display:inline-block;padding:4px 9px;border-radius:20px;background:#eef2ff;color:#3730a3;font-size:11px}.green{background:#dcfce7;color:#166534}.amber{background:#fef3c7;color:#92400e}.red{background:#fee2e2;color:#991b1b}.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0}.empty{padding:30px;text-align:center;color:#667085}.modalback{position:fixed;inset:0;background:#0008;display:grid;place-items:center;padding:20px;z-index:20}.modal{background:#fff;border-radius:14px;padding:22px;width:min(600px,95%);max-height:92vh;overflow:auto}.actions{display:flex;gap:8px;justify-content:flex-end}.error{color:#b42318;margin-top:10px}.markbar{background:linear-gradient(135deg,#101827,#243148);color:#fff;border-radius:14px;padding:18px;margin:18px 0}.markbar h3{margin:0 0 4px;color:#f0c060}.markbar p{margin:0;color:#cbd5e1;font-size:13px}.activity{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #eee}.dot{width:9px;height:9px;border-radius:50%;background:#2563eb;margin-top:5px;flex:0 0 auto}@media(max-width:850px){.side{width:64px;padding:12px 8px}.side h2,.side small,.navbtn span{display:none}.main{margin-left:64px;padding:18px}.grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.grid{grid-template-columns:1fr}.top{display:block}}
 </style>
 <!-- ERP CDN FALLBACK -->
 <script>window.addEventListener("error",function(e){if(e.message&&e.message.includes("supabase")){var r=document.getElementById("root");if(r)r.innerHTML="<div style=\"padding:40px;font-family:Arial\"><h2>Markcharles ERP</h2><p>Loading the ERP service failed. Please refresh this page.</p></div>";}});</script>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+
+<!-- ERP STARTUP PATCH V2 -->
+<script>
+(function(){
+  window.addEventListener('error', function(e){
+    var msg = e && (e.error && e.error.message || e.message || 'Unknown browser error');
+    var r = document.getElementById('root');
+    if(r && (!r.innerHTML || r.innerHTML.indexOf('ERP Login') === -1) && /supabase|createClient|undefined|ReferenceError|TypeError/i.test(String(msg))){
+      r.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not start</h2><p>Please refresh the page. If the problem continues, the browser blocked the Supabase service required by the ERP.</p><pre style="white-space:pre-wrap;color:#b42318;font-size:12px">'+String(msg).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})+'</pre></div></div>';
+    }
+  });
+  setTimeout(function(){
+    if(typeof window.supabase === 'undefined'){
+      var r=document.getElementById('root');
+      if(r) r.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not load</h2><p>The Supabase browser library did not load. Please refresh or try another browser/network.</p></div></div>';
+    }
+  }, 5000);
+})();
+</script>
 </head>
-<body><div id="root"></div>
+<body><div id="root"><div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="text-align:center;padding:30px"><h2 style="margin:0 0 8px">MARKCHARLES GARMENT FACTORY</h2><p style="margin:0;color:#cbd5e1">Loading ERP...</p></div></div></div>
 <script>
 const SUPABASE_URL="https://tnbvlecniuwshiheiokl.supabase.co";
 const SUPABASE_KEY="sb_publishable_Gqm3hqeCqvxmR59Wie-mEA_eO1MgwVK";
