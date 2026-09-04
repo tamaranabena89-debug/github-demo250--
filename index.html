@@ -9,7 +9,26 @@
 </style>
 <!-- ERP CDN FALLBACK -->
 <script>window.addEventListener("error",function(e){if(e.message&&e.message.includes("supabase")){var r=document.getElementById("root");if(r)r.innerHTML="<div style=\"padding:40px;font-family:Arial\"><h2>Markcharles ERP</h2><p>Loading the ERP service failed. Please refresh this page.</p></div>";}});</script>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+
+<!-- ERP STARTUP PATCH V2 -->
+<script>
+(function(){
+  window.addEventListener('error', function(e){
+    var msg = e && (e.error && e.error.message || e.message || 'Unknown browser error');
+    var r = document.getElementById('root');
+    if(r && (!r.innerHTML || r.innerHTML.indexOf('ERP Login') === -1) && /supabase|createClient|undefined|ReferenceError|TypeError/i.test(String(msg))){
+      r.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not start</h2><p>Please refresh the page. If the problem continues, the browser blocked the Supabase service required by the ERP.</p><pre style="white-space:pre-wrap;color:#b42318;font-size:12px">'+String(msg).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})+'</pre></div></div>';
+    }
+  });
+  setTimeout(function(){
+    if(typeof window.supabase === 'undefined'){
+      var r=document.getElementById('root');
+      if(r) r.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not load</h2><p>The Supabase browser library did not load. Please refresh or try another browser/network.</p></div></div>';
+    }
+  }, 5000);
+})();
+</script>
 </head>
 <body><div id="root"><div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="text-align:center;padding:30px"><h2 style="margin:0 0 8px">MARKCHARLES GARMENT FACTORY</h2><p style="margin:0;color:#cbd5e1">Loading ERP...</p></div></div></div>
 <script id="erp-app-code" type="text/plain">
