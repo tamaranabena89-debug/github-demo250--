@@ -82,9 +82,9 @@ jobs:
           })();
           </script>
           '''
-          if '</body></html>' not in s:
-              raise SystemExit('Document end not found')
-          s = s.replace('</body></html>', loader + '</body></html>', 1)
+          if '</body>' not in s:
+              raise SystemExit('Document body closing tag not found')
+          s = s.replace('</body>', loader + '</body>', 1)
           p.write_text(s, encoding='utf-8')
           print('Patched index.html:', len(s), 'bytes')
 
