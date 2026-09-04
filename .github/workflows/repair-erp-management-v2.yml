@@ -1,0 +1,37 @@
+name: Repair ERP Management Controls v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/repair-erp-management-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix global references in management patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='Repair ERP Management Controls'
+          if marker in s:
+              start=s.index('<script>', s.index(marker)-500)
+              end=s.index('</script>', start)+len('</script>')
+              block=s[start:end]
+              block=block.replace('window.db','db').replace('window.profile','profile').replace('window.user','user').replace('window.content','content').replace('window.esc','esc').replace('window.toast','toast').replace('window.modal','modal').replace('window.menu','menu').replace('window.logActivity','logActivity').replace('window.staff','staff').replace('window.roles','roles')
+              s=s[:start]+block+s[end:]
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Fix ERP management control references'
+          git push
