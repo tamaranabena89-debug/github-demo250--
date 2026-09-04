@@ -1,4 +1,4 @@
-name: Use local Supabase loader in ERP
+name: Fix ERP Supabase startup
 
 on:
   push:
@@ -14,22 +14,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Replace external Supabase loader
+      - name: Repair ERP startup loader
         shell: python
         run: |
           from pathlib import Path
+          import re
+
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          old = '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>'
-          new = '<script src="/api/supabase-js.js"></script>'
-          if new in s:
-              print('Local Supabase loader already configured')
-              raise SystemExit(0)
-          if old not in s:
-              raise SystemExit('Expected external Supabase loader was not found')
-          s = s.replace(old, new, 1)
+
+          # Replace any direct browser Supabase CDN script with the same-origin Vercel API.
+          s, n = re.subn(
+              r'<script\s+src=["\']https?://[^"\']*supabase-js[^"\']*["\']\s*></script>',
+              '<script src="/api/supabase-js.js"></script>',
+              s,
+              count=1,
+              flags=re.I,
+          )
+
+          # If the CDN tag was already removed, make sure the local API loader exists.
+          if '/api/supabase-js.js' not in s:
+              s = s.replace('</body>', '<script src="/api/supabase-js.js"></script>\n</body>', 1)
+
+          # The ERP source is intentionally text/plain so it cannot execute before Supabase exists.
+          # Start it only after the same-origin Supabase loader has finished.
+          boot_marker = '<!-- ERP SAME-ORIGIN BOOT -->'
+          if boot_marker not in s:
+              boot = '''
+<script>
+<!-- ERP SAME-ORIGIN BOOT -->
+(function(){
+  function boot(){
+    var source=document.getElementById('erp-app-code');
+    if(!source) return;
+    if(!window.supabase || typeof window.supabase.createClient !== 'function'){
+      setTimeout(boot,100);
+      return;
+    }
+    var script=document.createElement('script');
+    script.textContent=source.textContent;
+    document.body.appendChild(script);
+  }
+  boot();
+})();
+</script>
+'''
+              s = s.replace('</body>', boot + '</body>', 1)
+
           p.write_text(s, encoding='utf-8')
-          print('Updated index.html to use same-origin Supabase loader')
+          print('Supabase loader replacements:', n)
+          print('Same-origin API loader present:', '/api/supabase-js.js' in s)
+          print('Boot marker present:', boot_marker in s)
 
       - name: Commit patch
         run: |
@@ -37,5 +72,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           git diff --cached --quiet && exit 0
-          git commit -m 'Use same-origin Supabase loader'
+          git commit -m 'Fix ERP same-origin Supabase startup'
           git push
