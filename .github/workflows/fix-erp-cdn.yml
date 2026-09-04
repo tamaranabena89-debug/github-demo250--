@@ -1,29 +1,14 @@
 name: ERP CDN Fallback
+
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
-  patch:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Add CDN fallback
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('index.html')
-          s=p.read_text(encoding='utf-8')
-          marker='<!-- ERP CDN FALLBACK -->'
-          if marker not in s:
-              patch='''<!-- ERP CDN FALLBACK -->\n<script>window.addEventListener("error",function(e){if(e.message&&e.message.includes("supabase")){var r=document.getElementById("root");if(r)r.innerHTML="<div style=\\"padding:40px;font-family:Arial\\"><h2>Markcharles ERP</h2><p>Loading the ERP service failed. Please refresh this page.</p></div>";}});</script>\n<script src="https://unpkg.com/@supabase/supabase-js@2"></script>\n'''
-              s=s.replace('</head>',patch+'</head>',1)
-              p.write_text(s,encoding='utf-8')
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
-          git diff --cached --quiet || git commit -m 'Add Supabase CDN fallback'
-          git push
+      - name: Legacy CDN workflow disabled
+        run: echo "Legacy CDN fallback disabled. ERP uses the same-origin Supabase loader now." 
