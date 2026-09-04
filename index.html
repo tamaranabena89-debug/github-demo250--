@@ -161,4 +161,54 @@ init();
     if(!confirm('Delete role '+name+'?')) return; const r=await window.db.from('erp_roles').delete().eq('id',id); if(r.error) return window.toast(r.error.message); window.roles();
   };
 })();
-</script></body></html>
+</script><script>
+    /* ERP Universal Search Controls */
+    (function(){
+      const oldGo = window.go;
+      const searchable = new Set(['orders','salesactivity','production','procurement','inventory','qa','customers','payments','staff','roles','audit']);
+      function addSearch(viewName){
+        if(!searchable.has(viewName)) return;
+        const existing=document.getElementById('erpUniversalSearch');
+        if(existing) existing.remove();
+        const table=content.querySelector('.table');
+        const wrap=content.querySelector('.tablewrap');
+        if(!table || !wrap) return;
+        const box=document.createElement('div');
+        box.id='erpUniversalSearch';
+        box.className='bar';
+        box.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin:14px 0 0;';
+        box.innerHTML='<div style="display:flex;gap:8px;width:100%;align-items:center"><input id="erpSearchInput" type="search" placeholder="Search this page..." autocomplete="off" style="margin:0;flex:1"><button class="btn gray" id="erpSearchClear" type="button">Clear</button></div><div id="erpSearchCount" class="muted" style="margin-top:6px"></div>';
+        wrap.parentNode.insertBefore(box,wrap);
+        const input=document.getElementById('erpSearchInput');
+        const count=document.getElementById('erpSearchCount');
+        const clear=document.getElementById('erpSearchClear');
+        const rows=()=>Array.from(table.querySelectorAll('tr')).slice(1);
+        function run(){
+          const q=input.value.trim().toLowerCase();
+          let shown=0,total=0;
+          rows().forEach(row=>{
+            total++;
+            const match=!q || row.textContent.toLowerCase().includes(q);
+            row.style.display=match?'':'none';
+            if(match) shown++;
+          });
+          count.textContent=q ? `${shown} of ${total} records shown` : `${total} records`;
+        }
+        input.addEventListener('input',run);
+        clear.addEventListener('click',()=>{input.value='';run();input.focus();});
+        input.addEventListener('keydown',e=>{if(e.key==='Escape'){input.value='';run();}});
+        run();
+      }
+      window.go = async function(v){
+        await oldGo(v);
+        setTimeout(()=>addSearch(v),0);
+      };
+      document.addEventListener('keydown',e=>{
+        if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){
+          const input=document.getElementById('erpSearchInput');
+          if(input){e.preventDefault();input.focus();input.select();}
+        }
+      });
+    })();
+    </script>
+</body></html>
