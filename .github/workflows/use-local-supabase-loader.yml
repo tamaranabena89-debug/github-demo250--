@@ -10,38 +10,37 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fix index loader
+      - name: Patch ERP startup
+        shell: python
         run: |
-          python - <<'PY'
           from pathlib import Path
-          import re
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
 
-          # Any browser Supabase CDN tag is replaced with the same-origin Vercel function.
-          s = re.sub(r'<script\s+src=["\']https?://[^"\']*supabase-js[^"\']*["\']\s*></script>', '<script src="/api/supabase-js.js"></script>', s, count=1, flags=re.I)
+          # Replace the browser CDN with the same-origin Vercel function.
+          for old in [
+              '<script src="https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>',
+              '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>',
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>',
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>'
+          ]:
+              s = s.replace(old, '<script src="/api/supabase-js.js"></script>')
 
-          # Remove the old startup patch which can display a false failure while the loader is working.
-          start = s.find('<!-- ERP CDN FALLBACK -->')
-          if start >= 0:
-              end = s.find('</head>', start)
-              if end >= 0:
-                  s = s[:start] + s[end:]
-
-          # Keep the ERP application source inert until Supabase is available.
-          s = s.replace('<script id="erp-app-code" type="text/plain">', '<script id="erp-app-code" type="text/plain">', 1)
-          if 'id="erp-app-code"' not in s:
+          # Keep app code inert until Supabase is loaded.
+          if '<script id="erp-app-code" type="text/plain">' not in s:
               s = s.replace('<script>\nconst SUPABASE_URL=', '<script id="erp-app-code" type="text/plain">\nconst SUPABASE_URL=', 1)
 
-          # Remove any duplicate same-origin boot blocks from previous attempts.
-          s = re.sub(r'\n?<script[^>]*>\s*<!-- ERP SAME-ORIGIN BOOT -->.*?</script>\s*', '\n', s, count=0, flags=re.S)
+          # Add the same-origin loader if it is missing.
+          if '/api/supabase-js.js' not in s:
+              s = s.replace('</body>', '<script src="/api/supabase-js.js"></script>\n</body>', 1)
 
-          boot = '''
+          # Start the ERP only after window.supabase exists.
+          if '<!-- ERP SAME-ORIGIN BOOT -->' not in s:
+              boot = '''
 <script>
 <!-- ERP SAME-ORIGIN BOOT -->
 (function(){
@@ -60,21 +59,16 @@ jobs:
 })();
 </script>
 '''
-
-          if '/api/supabase-js.js' not in s:
-              s = s.replace('</body>', '<script src="/api/supabase-js.js"></script>\n</body>', 1)
-          if '<!-- ERP SAME-ORIGIN BOOT -->' not in s:
               s = s.replace('</body>', boot + '</body>', 1)
 
           p.write_text(s, encoding='utf-8')
-          print('ERP startup fixed:', '/api/supabase-js.js' in s and '<!-- ERP SAME-ORIGIN BOOT -->' in s)
-          PY
+          print('ERP startup patch complete')
 
-      - name: Commit fix
+      - name: Commit patch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           git diff --cached --quiet && exit 0
-          git commit -m 'Fix ERP Supabase startup loader'
+          git commit -m 'Fix ERP Supabase startup'
           git push
