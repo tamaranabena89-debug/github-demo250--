@@ -1,0 +1,84 @@
+name: Fix Supabase same-origin loader
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add same-origin Supabase proxy
+        shell: bash
+        run: |
+          mkdir -p api
+          cat > api/supabase-js.js <<'EOF'
+          module.exports = async function (req, res) {
+            const sources = [
+              'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js',
+              'https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js'
+            ];
+            let lastError = null;
+            for (const url of sources) {
+              try {
+                const r = await fetch(url);
+                if (!r.ok) throw new Error(`Upstream returned ${r.status}`);
+                const js = await r.text();
+                res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+                res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+                return res.status(200).send(js);
+              } catch (e) {
+                lastError = e;
+              }
+            }
+            return res.status(502).json({ error: 'Unable to load Supabase browser library', detail: String(lastError || '') });
+          };
+          EOF
+
+      - name: Replace browser CDN loader
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          if '/api/supabase-js.js' in s:
+              print('Same-origin loader already present')
+              raise SystemExit(0)
+          marker = '<script type="module">\n(async function(){'
+          start = s.find(marker)
+          if start == -1:
+              raise SystemExit('Multi-CDN loader not found')
+          end = s.find('</script>', start)
+          if end == -1:
+              raise SystemExit('Loader closing script tag not found')
+          end += len('</script>')
+          replacement = '''<script src="/api/supabase-js.js"></script>
+          <script>
+          (function(){
+            const root=document.getElementById('root');
+            const source=document.getElementById('erp-app-code');
+            if(!window.supabase || typeof window.supabase.createClient !== 'function'){
+              if(root) root.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:620px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not connect</h2><p>The ERP service could not be loaded from the secure server connection. Please refresh the page.</p></div></div>';
+              return;
+            }
+            if(!source) return;
+            const script=document.createElement('script');
+            script.textContent=source.textContent;
+            document.body.appendChild(script);
+          })();
+          </script>'''
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s, encoding='utf-8')
+
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html api/supabase-js.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Serve Supabase library through same-origin proxy'
+          git push
