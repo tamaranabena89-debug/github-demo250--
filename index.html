@@ -16,7 +16,7 @@ const SUPABASE_KEY="sb_publishable_Gqm3hqeCqvxmR59Wie-mEA_eO1MgwVK";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let user=null,profile=null,view="dashboard";
 const menu=[["dashboard","Dashboard"],["orders","Orders"],["salesactivity","Sales Calls & WhatsApp"],["production","Production"],["procurement","Procurement"],["inventory","Store / Inventory"],["qa","QA / QC"],["customers","Customers"],["payments","Payments"],["staff","Staff"],["roles","Roles & Permissions"],["audit","Audit Log"]];
-const perms={Tailor:[],Finisher:[],Management:menu.map(x=>x[0]),Sales:["dashboard","orders","salesactivity","customers","payments","inventory","qa","procurement","production"],Procurement:["dashboard","procurement","inventory"],Store:["dashboard","inventory","qa","procurement","orders","production"],Production:["dashboard","orders","production"],"QA/QC":["dashboard","orders","qa"],Accounts:["dashboard","payments"],Delivery:["dashboard","orders"]};
+const perms={Tailor:[],Finisher:[],Management:menu.map(x=>x[0]),Sales:["dashboard","orders","salesactivity","customers","payments","inventory","qa","procurement","production"],Procurement:["dashboard","procurement","inventory"],Store:["dashboard","inventory","qa","procurement","orders","production","customers"],Production:["dashboard","orders","production"],"QA/QC":["dashboard","orders","qa"],Accounts:["dashboard","payments"],Delivery:["dashboard","orders"]};
 const STAGES=["Procurement","Awaiting Fitting","Cutting","Sewing","Finishing","Packaging","QA/QC","Delivery","Completed","Rework","On Hold"];
 const money=n=>"₦"+Number(n||0).toLocaleString();
 const esc=x=>String(x??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
@@ -89,4 +89,76 @@ async function editPayment(id){const r=await db.from('payments').select('*').eq(
 async function savePaymentEdit(id){const r=await db.from('payments').update({order_id:epOrder.value,amount:+epAmount.value,method:epMethod.value,paid_on:epDate.value||null}).eq('id',id);if(r.error)return toast(r.error.message);await logActivity('Payment updated',id);document.querySelector('.modalback')?.remove();payments()}
 init();
 </script>
-</body></html>
+<script>
+(function(){
+  const oldStaff = window.staff;
+  const oldRoles = window.roles;
+  window.staff = async function(){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage staff.');
+    const r=await window.db.from('profiles').select('*').order('full_name');
+    if(r.error) return window.toast(r.error.message);
+    window.content.innerHTML='<div class="bar"><button class="btn" onclick="newStaff()">+ Add Staff</button></div><div class="tablewrap"><table class="table"><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>'+((r.data||[]).map(x=>`<tr><td>${window.esc(x.full_name)}</td><td>${window.esc(x.email||'')}</td><td>${window.esc(x.role||'')}</td><td>${x.active?'Active':'Inactive'}</td><td><button class="btn" onclick="editStaff('${x.id}')">Edit</button> <button class="btn gray" onclick="toggleStaff('${x.id}',${!x.active})">${x.active?'Deactivate':'Activate'}</button> <button class="btn danger" onclick="deleteStaff('${x.id}')">Delete</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">No staff yet</td></tr>')+'</table></div>';
+  };
+  window.newStaff = async function(){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage staff.');
+    const roles=await window.db.from('erp_roles').select('name').eq('active',true).order('name');
+    window.modal('Add Staff Profile',`<p class="muted">Create the staff login in Supabase Authentication first, then enter the same User ID here.</p><label>Auth User ID<input id="nsId" placeholder="UUID from Authentication"></label><label>Full Name<input id="nsName"></label><label>Email<input id="nsEmail" type="email"></label><label>Role<select id="nsRole">${(roles.data||[]).map(x=>`<option>${window.esc(x.name)}</option>`).join('')}</select></label><label><input id="nsActive" type="checkbox" checked style="width:auto"> Active</label>`,'saveStaff()');
+  };
+  window.saveStaff = async function(){
+    const r=await window.db.from('profiles').insert({id:nsId.value.trim(),full_name:nsName.value.trim(),email:nsEmail.value.trim(),role:nsRole.value,active:nsActive.checked});
+    if(r.error) return window.toast(r.error.message);
+    await window.logActivity('Staff profile created',nsName.value); document.querySelector('.modalback')?.remove(); window.staff();
+  };
+  window.editStaff = async function(id){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage staff.');
+    const r=await window.db.from('profiles').select('*').eq('id',id).single(); if(r.error) return window.toast(r.error.message);
+    const roles=await window.db.from('erp_roles').select('name').eq('active',true).order('name');
+    window.modal('Edit Staff',`<label>Full Name<input id="esName" value="${window.esc(r.data.full_name||'')}"></label><label>Email<input id="esEmail" type="email" value="${window.esc(r.data.email||'')}"></label><label>Role<select id="esRole">${(roles.data||[]).map(x=>`<option ${x.name===r.data.role?'selected':''}>${window.esc(x.name)}</option>`).join('')}</select></label><label><input id="esActive" type="checkbox" ${r.data.active?'checked':''} style="width:auto"> Active</label>`,'saveStaffEdit(\''+id+'\')');
+  };
+  window.saveStaffEdit = async function(id){
+    const r=await window.db.from('profiles').update({full_name:esName.value.trim(),email:esEmail.value.trim(),role:esRole.value,active:esActive.checked}).eq('id',id); if(r.error) return window.toast(r.error.message);
+    await window.logActivity('Staff profile updated',esName.value); document.querySelector('.modalback')?.remove(); window.staff();
+  };
+  window.toggleStaff = async function(id,active){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage staff.');
+    const r=await window.db.from('profiles').update({active}).eq('id',id); if(r.error) return window.toast(r.error.message); window.staff();
+  };
+  window.deleteStaff = async function(id){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage staff.');
+    if(id===window.user.id) return window.toast('You cannot delete your own active profile. Deactivate it instead.');
+    if(!confirm('Delete this staff profile? The authentication account is not deleted.')) return;
+    const r=await window.db.from('profiles').delete().eq('id',id); if(r.error) return window.toast(r.error.message); window.staff();
+  };
+  window.roles = async function(){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage roles and permissions.');
+    const [r,p]=await Promise.all([window.db.from('erp_roles').select('*').order('name'),window.db.from('erp_role_permissions').select('*')]);
+    if(r.error) return window.toast(r.error.message); if(p.error) return window.toast(p.error.message);
+    const by={}; (p.data||[]).forEach(x=>(by[x.role_id]||(by[x.role_id]=[])).push(x.permission));
+    window.content.innerHTML='<div class="bar"><button class="btn" onclick="newRole()">+ Add Role</button></div><div class="tablewrap"><table class="table"><tr><th>Role</th><th>Description</th><th>Permissions</th><th>Actions</th></tr>'+((r.data||[]).map(x=>`<tr><td><b>${window.esc(x.name)}</b></td><td>${window.esc(x.description||'')}</td><td>${window.esc((by[x.id]||[]).join(', ')||'None')}</td><td><button class="btn" onclick="editRole('${x.id}')">Edit</button> <button class="btn danger" onclick="deleteRole('${x.id}','${window.esc(x.name)}')">Delete</button></td></tr>`).join('')||'<tr><td colspan="4" class="empty">No roles yet</td></tr>')+'</table></div>';
+  };
+  window.newRole = function(){ window.modal('Add Role',`<label>Role Name<input id="nrName"></label><label>Description<textarea id="nrDesc"></textarea></label><label>Permissions</label><div>${window.menu.map(x=>`<label style="display:block"><input type="checkbox" class="nrPerm" value="${x[0]}" style="width:auto"> ${x[1]}</label>`).join('')}</div>`,'saveRole()'); };
+  window.saveRole = async function(){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage roles.');
+    const r=await window.db.from('erp_roles').insert({name:nrName.value.trim(),description:nrDesc.value.trim(),active:true}).select().single(); if(r.error) return window.toast(r.error.message);
+    const selected=[...document.querySelectorAll('.nrPerm:checked')].map(x=>({role_id:r.data.id,permission:x.value})); if(selected.length){const q=await window.db.from('erp_role_permissions').insert(selected); if(q.error) return window.toast(q.error.message);}
+    await window.logActivity('Role created',nrName.value); document.querySelector('.modalback')?.remove(); window.roles();
+  };
+  window.editRole = async function(id){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can manage roles.');
+    const [r,p]=await Promise.all([window.db.from('erp_roles').select('*').eq('id',id).single(),window.db.from('erp_role_permissions').select('permission').eq('role_id',id)]); if(r.error) return window.toast(r.error.message);
+    const selected=new Set((p.data||[]).map(x=>x.permission));
+    window.modal('Edit Role',`<label>Role Name<input id="erName" value="${window.esc(r.data.name)}"></label><label>Description<textarea id="erDesc">${window.esc(r.data.description||'')}</textarea></label><label>Permissions</label><div>${window.menu.map(x=>`<label style="display:block"><input type="checkbox" class="erPerm" value="${x[0]}" ${selected.has(x[0])?'checked':''} style="width:auto"> ${x[1]}</label>`).join('')}</div>`,'saveRoleEdit(\''+id+'\')');
+  };
+  window.saveRoleEdit = async function(id){
+    const r=await window.db.from('erp_roles').update({name:erName.value.trim(),description:erDesc.value.trim()}).eq('id',id); if(r.error) return window.toast(r.error.message);
+    const d=await window.db.from('erp_role_permissions').delete().eq('role_id',id); if(d.error) return window.toast(d.error.message);
+    const selected=[...document.querySelectorAll('.erPerm:checked')].map(x=>({role_id:id,permission:x.value})); if(selected.length){const q=await window.db.from('erp_role_permissions').insert(selected); if(q.error) return window.toast(q.error.message);}
+    await window.logActivity('Role updated',erName.value); document.querySelector('.modalback')?.remove(); window.roles();
+  };
+  window.deleteRole = async function(id,name){
+    if(window.profile?.role!=='Management') return window.toast('Only Management can delete roles.');
+    const used=await window.db.from('profiles').select('id').eq('role',name).limit(1); if(used.data?.length) return window.toast('This role is assigned to a staff member. Reassign them before deleting it.');
+    if(!confirm('Delete role '+name+'?')) return; const r=await window.db.from('erp_roles').delete().eq('id',id); if(r.error) return window.toast(r.error.message); window.roles();
+  };
+})();
+</script></body></html>
