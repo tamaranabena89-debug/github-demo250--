@@ -1,0 +1,58 @@
+name: Fix ERP blank page startup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch ERP startup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          marker = '<!-- ERP STARTUP PATCH V2 -->'
+          if marker in s:
+              print('Already patched')
+              raise SystemExit(0)
+
+          s = s.replace(
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>',
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>'
+          )
+
+          s = s.replace(
+              '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>',
+              '<script src="https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>'
+          )
+
+          old = '<body><div id="root"></div>'
+          new = '''<body><div id="root"><div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="text-align:center;padding:30px"><h2 style="margin:0 0 8px">MARKCHARLES GARMENT FACTORY</h2><p style="margin:0;color:#cbd5e1">Loading ERP...</p></div></div></div>'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          boot = '''\n<!-- ERP STARTUP PATCH V2 -->\n<script>\n(function(){\n  window.addEventListener('error', function(e){\n    var msg = e && (e.error && e.error.message || e.message || 'Unknown browser error');\n    var r = document.getElementById('root');\n    if(r && (!r.innerHTML || r.innerHTML.indexOf('ERP Login') === -1) && /supabase|createClient|undefined|ReferenceError|TypeError/i.test(String(msg))){\n      r.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not start</h2><p>Please refresh the page. If the problem continues, the browser blocked the Supabase service required by the ERP.</p><pre style="white-space:pre-wrap;color:#b42318;font-size:12px">'+String(msg).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})+'</pre></div></div>';\n    }\n  });\n  setTimeout(function(){\n    if(typeof window.supabase === 'undefined'){\n      var r=document.getElementById('root');\n      if(r) r.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:560px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not load</h2><p>The Supabase browser library did not load. Please refresh or try another browser/network.</p></div></div>';\n    }\n  }, 5000);\n})();\n</script>\n'''
+          s = s.replace('</head>', boot + '</head>', 1)
+          p.write_text(s, encoding='utf-8')
+          print('Patched index.html')
+          PY
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Fix ERP blank page startup"
+            git push
+          fi
