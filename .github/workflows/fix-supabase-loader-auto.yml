@@ -1,0 +1,98 @@
+name: Run Supabase loader repair
+
+on:
+  push:
+    paths:
+      - 'index.html'
+      - '.github/workflows/fix-supabase-loader-auto.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch browser loader
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          if 'id="erp-app-code"' in s:
+              print('Already patched')
+              raise SystemExit(0)
+
+          for tag in [
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>\n',
+              '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n',
+              '<script src="https://unpkg.com/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>\n',
+          ]:
+              s = s.replace(tag, '')
+
+          start = s.find('<!-- ERP CDN FALLBACK -->')
+          if start != -1:
+              end = s.find('</head>', start)
+              if end == -1:
+                  raise SystemExit('Old startup patch has no closing head')
+              s = s[:start] + s[end:]
+
+          marker = '<script>\nconst SUPABASE_URL='
+          if marker not in s:
+              raise SystemExit('ERP app marker not found')
+          s = s.replace(marker, '<script id="erp-app-code" type="text/plain">\nconst SUPABASE_URL=', 1)
+
+          marker = '<script>\n/* MARKCHARLES SEARCH V2 */'
+          if marker not in s:
+              raise SystemExit('Search V2 marker not found')
+          s = s.replace(marker, '<script id="erp-search-code" type="text/plain">\n/* MARKCHARLES SEARCH V2 */', 1)
+
+          loader = r'''<script type="module">
+          (async function(){
+            const sources = [
+              'https://esm.sh/@supabase/supabase-js@2.116.0?bundle',
+              'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/+esm',
+              'https://unpkg.com/@supabase/supabase-js@2.116.0?module'
+            ];
+            let mod = null;
+            let lastError = null;
+            for (const src of sources) {
+              try {
+                mod = await import(src);
+                if (mod && typeof mod.createClient === 'function') break;
+              } catch (e) { lastError = e; }
+            }
+            const root = document.getElementById('root');
+            if (!mod || typeof mod.createClient !== 'function') {
+              if (root) root.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:#101827;color:#fff;font-family:Arial,sans-serif"><div style="background:#fff;color:#17202f;padding:30px;border-radius:14px;max-width:620px;width:92%"><h2 style="margin-top:0">Markcharles ERP could not connect</h2><p>The browser could not load the Supabase service library. Please check the internet connection, disable any browser extension or network filter blocking CDNs, and refresh.</p><p style="font-size:12px;color:#667085">Tried multiple Supabase-compatible browser module sources.</p></div></div>';
+              console.error('Supabase startup failed', lastError);
+              return;
+            }
+            window.supabase = { createClient: mod.createClient };
+            for (const id of ['erp-app-code','erp-search-code']) {
+              const source = document.getElementById(id);
+              if (!source) continue;
+              const script = document.createElement('script');
+              script.textContent = source.textContent;
+              source.replaceWith(script);
+            }
+          })();
+          </script>
+          '''
+          if '</body></html>' not in s:
+              raise SystemExit('Document end not found')
+          s = s.replace('</body></html>', loader + '</body></html>', 1)
+          p.write_text(s, encoding='utf-8')
+          print('Patched index.html:', len(s), 'bytes')
+
+      - name: Commit repaired index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix Supabase browser startup"
+          git push
